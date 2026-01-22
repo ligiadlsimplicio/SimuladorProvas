@@ -4,144 +4,161 @@ import random
 import os
 
 def main(page: ft.Page):
-    # Configurações de visual do App
-    page.title = "Simulado TJ-SP - Assistente Social"
+    # Configurações de página
+    page.title = "Simulado TJ-SP"
     page.theme_mode = "light"
-    page.window_width = 450
-    page.window_height = 800
-    page.scroll = "auto"
     page.padding = 20
+    page.scroll = "auto"
+    page.horizontal_alignment = "center"
 
-    # Carregar dados do JSON
+    state = {
+        "banco": [],
+        "questoes": [],
+        "indice": 0,
+        "pontos": 0,
+        "respondida": False
+    }
+
+    # 1. Carregar Banco de Dados
     try:
-        if not os.path.exists("questoes_tjsp.json"):
-            page.add(ft.Text("Erro: Arquivo 'questoes_tjsp.json' não encontrado."))
+        if os.path.exists("questoes_tjsp.json"):
+            with open("questoes_tjsp.json", "r", encoding="utf-8") as f:
+                state["banco"] = json.load(f)
+        else:
+            page.add(ft.Text("Arquivo JSON não encontrado!"))
             return
-        with open("questoes_tjsp.json", "r", encoding="utf-8") as f:
-            todas = json.load(f)
     except Exception as e:
-        page.add(ft.Text(f"Erro ao ler arquivo: {e}"))
+        page.add(ft.Text(f"Erro ao carregar: {e}"))
         return
-    
-    # Filtra apenas as questões que têm gabarito (suas 296 questões)
-    questoes = [q for q in todas if q.get('correta') is not None]
-    random.shuffle(questoes)
 
-    state = {"indice": 0, "pontos": 0, "respondida": False}
-
-    def verificar_resposta(e):
-        if state["respondida"]: return
+    def validar_resposta(e):
+        # Se já respondeu, ignora novos cliques
+        if state["respondida"]: 
+            return
+        
         state["respondida"] = True
+        letra_clicada = e.control.data
+        correta = state["questoes"][state["indice"]]["correta"]
         
-        letra_clicada = e.control.data # Pegamos a letra salva no botão
-        correta = questoes[state["indice"]]["correta"]
-        
+        print(f"DEBUG: Você clicou na {letra_clicada}. A correta é {correta}")
+
         if letra_clicada == correta:
             e.control.bgcolor = "green"
             e.control.color = "white"
             state["pontos"] += 1
-            feedback_text.value = "✅ Resposta Correta!"
-            feedback_text.color = "green"
         else:
             e.control.bgcolor = "red"
             e.control.color = "white"
-            feedback_text.value = f"❌ Errada. A correta era {correta}"
-            feedback_text.color = "red"
-        
+
+        # Mostra o botão de próxima
         btn_proxima.visible = True
         page.update()
 
-    def proxima_questao(e):
+    def ir_proxima(e):
         state["indice"] += 1
         state["respondida"] = False
-        if state["indice"] < len(questoes) and state["indice"] < 10:
-            montar_tela()
+        if state["indice"] < len(state["questoes"]) and state["indice"] < 10:
+            mostrar_pergunta()
         else:
-            mostrar_resultado()
+            mostrar_fim()
 
-    feedback_text = ft.Text("", size=18, weight="bold")
-    
-    # Botão Próxima usando o novo padrão "FilledButton"
+    # Botão Próxima (Centralizado)
     btn_proxima = ft.FilledButton(
-        content=ft.Text("Próxima Questão"),
-        on_click=proxima_questao, 
-        visible=False
+        content=ft.Text("PRÓXIMA QUESTÃO", weight="bold"),
+        on_click=ir_proxima,
+        visible=False,
+        width=300,
+        height=50
     )
 
-    def montar_tela():
-        page.clean()
-        btn_proxima.visible = False
-        feedback_text.value = ""
-        q = questoes[state["indice"]]
+    def iniciar_simulado(materia=None):
+        if materia:
+            state["questoes"] = [q for q in state["banco"] if q.get("materia") == materia and q.get("correta")]
+        else:
+            state["questoes"] = [q for q in state["banco"] if q.get("correta")]
         
-        # Cabeçalho e Progresso
-        page.add(
-            ft.Text(f"Questão {state['indice'] + 1} de 10", size=16, weight="bold", color="blue"),
-            ft.ProgressBar(value=(state['indice'] + 1) / 10, color="blue"),
-            ft.Text(f"Matéria: {q.get('materia', 'Geral')}", size=12, italic=True),
-            ft.Divider(),
-        )
+        if not state["questoes"]: return
 
-        # --- EXIBIÇÃO DE IMAGEM (Versão Blindada contra erros) ---
-        if q.get("imagem") and os.path.exists(q["imagem"]):
-            page.add(
-                ft.Row(
-                    [ft.Image(src=q["imagem"], width=350, fit="contain", border_radius=10)],
-                    alignment="center" # Usamos texto puro para não dar erro de atributo
-                )
-            )
-
-        # Enunciado
-        page.add(
-            ft.Text(q["enunciado"], size=16, weight="w500", text_align="justify"),
-            ft.Text("\nSelecione uma alternativa:", size=14, italic=True),
-        )
-
-        # Botões das alternativas (Versão simplificada)
-        for letra, texto in q["alternativas"].items():
-            page.add(
-                ft.ElevatedButton(
-                    content=ft.Container(
-                        content=ft.Text(f"{letra}) {texto}", size=14),
-                        padding=15 # Espaço interno do botão
-                    ),
-                    data=letra,
-                    on_click=verificar_resposta,
-                    width=420,
-                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
-                )
-            )
-        
-        page.add(ft.Divider(), feedback_text, btn_proxima)
-        page.update()
-
-    def mostrar_resultado():
-        page.clean()
-        page.add(
-            ft.Column(
-                [
-                    ft.Icon(name="emoji_events", size=100, color="amber"),
-                    ft.Text("Fim do Simulado!", size=30, weight="bold"),
-                    ft.Text(f"Você acertou {state['pontos']} de 10.", size=20),
-                    ft.FilledButton(
-                        content=ft.Text("Tentar Novamente"), 
-                        on_click=lambda _: reinicio_total()
-                    )
-                ],
-                horizontal_alignment="center"
-            )
-        )
-        page.update()
-
-    def reinicio_total():
+        random.shuffle(state["questoes"])
         state["indice"] = 0
         state["pontos"] = 0
-        random.shuffle(questoes)
-        montar_tela()
+        state["respondida"] = False
+        mostrar_pergunta()
 
-    # Iniciar o simulado
-    montar_tela()
+    def mostrar_menu():
+        page.clean()
+        page.add(
+            ft.Text("SIMULADO TJ-SP", size=32, weight="bold", color="blue"),
+            ft.Text("Assistente Social", size=20, color="grey"),
+            ft.Divider(height=40),
+            ft.FilledButton(
+                content=ft.Text("INICIAR SIMULADO GERAL", size=16),
+                width=400, height=60, on_click=lambda _: iniciar_simulado()
+            ),
+            ft.Container(height=10),
+            ft.OutlinedButton(
+                content=ft.Text("SÓ SERVIÇO SOCIAL", size=16),
+                width=400, height=60, on_click=lambda _: iniciar_simulado("Serviço Social")
+            ),
+            ft.Container(height=10),
+            ft.OutlinedButton(
+                content=ft.Text("SÓ PORTUGUÊS", size=16),
+                width=400, height=60, on_click=lambda _: iniciar_simulado("Português")
+            ),
+            ft.Divider(height=40),
+            ft.Text(f"Questões disponíveis: {len(state['banco'])}", italic=True)
+        )
+        page.update()
 
-# Nas versões novas o comando é run() em vez de app()
+    def mostrar_pergunta():
+        page.clean()
+        btn_proxima.visible = False
+        q = state["questoes"][state["indice"]]
+        
+        page.add(
+            ft.Text(f"QUESTÃO {state['indice'] + 1} DE 10", size=18, weight="bold"),
+            ft.ProgressBar(value=(state['indice'] + 1) / 10, color="blue"),
+            ft.Divider(),
+            ft.Text(q["enunciado"], size=16, text_align="justify"),
+            ft.Container(height=20)
+        )
+
+        # Alternativas (Usando FilledTonalButton para cliques mais firmes)
+        for letra, texto in q["alternativas"].items():
+            page.add(
+                ft.FilledTonalButton(
+                    content=ft.Text(f"{letra}) {texto}", size=15, text_align="left"),
+                    data=letra,
+                    on_click=validar_resposta,
+                    width=420,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=8),
+                        padding=15
+                    )
+                ),
+                ft.Container(height=5)
+            )
+        
+        page.add(ft.Divider(), btn_proxima)
+        page.update()
+
+    def mostrar_fim():
+        page.clean()
+        page.add(
+            ft.Icon("emoji_events", size=100, color="amber"),
+            ft.Text("FIM DO SIMULADO", size=30, weight="bold"),
+            ft.Text(f"Você acertou {state['pontos']} de 10.", size=22),
+            ft.Container(height=30),
+            ft.FilledButton(
+                content=ft.Text("VOLTAR AO INÍCIO"), 
+                on_click=lambda _: mostrar_menu(),
+                width=300, height=50
+            )
+        )
+        page.update()
+
+    mostrar_menu()
+
+# Execução padrão 0.80+
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.run(main, assets_dir="assets")
