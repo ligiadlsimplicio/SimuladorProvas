@@ -1,164 +1,173 @@
 import flet as ft
 import json
-import random
 import os
+import random
 
 def main(page: ft.Page):
-    # Configurações de página
-    page.title = "Simulado TJ-SP"
-    page.theme_mode = "light"
-    page.padding = 20
+    page.title = "SIMULADOR TJ-SP"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.bgcolor = "#F0F2F5"
     page.scroll = "auto"
-    page.horizontal_alignment = "center"
+    page.horizontal_alignment = "center" 
 
     state = {
         "banco": [],
         "questoes": [],
         "indice": 0,
         "pontos": 0,
-        "respondida": False
+        "respondida": False,
+        "total": 10
     }
 
-    # 1. Carregar Banco de Dados
-    try:
-        if os.path.exists("questoes_tjsp.json"):
-            with open("questoes_tjsp.json", "r", encoding="utf-8") as f:
-                state["banco"] = json.load(f)
-        else:
-            page.add(ft.Text("Arquivo JSON não encontrado!"))
-            return
-    except Exception as e:
-        page.add(ft.Text(f"Erro ao carregar: {e}"))
+    # Carregar Banco de Dados
+    if os.path.exists("questoes_tjsp.json"):
+        with open("questoes_tjsp.json", "r", encoding="utf-8") as f:
+            state["banco"] = json.load(f)
+    else:
+        page.add(ft.Text("Erro: arquivo JSON não encontrado!"))
         return
 
-    def validar_resposta(e):
-        # Se já respondeu, ignora novos cliques
-        if state["respondida"]: 
-            return
-        
+    label_feedback = ft.Text("", size=18, weight="bold", text_align="center")
+
+    def verificar_resposta(e):
+        if state["respondida"]: return
         state["respondida"] = True
         letra_clicada = e.control.data
         correta = state["questoes"][state["indice"]]["correta"]
         
-        print(f"DEBUG: Você clicou na {letra_clicada}. A correta é {correta}")
-
         if letra_clicada == correta:
             e.control.bgcolor = "green"
             e.control.color = "white"
+            label_feedback.value = "✅ ACERTOU!"
+            label_feedback.color = "green"
             state["pontos"] += 1
         else:
             e.control.bgcolor = "red"
             e.control.color = "white"
-
-        # Mostra o botão de próxima
+            label_feedback.value = f"❌ ERROU! A correta era {correta}"
+            label_feedback.color = "red"
+        
         btn_proxima.visible = True
         page.update()
 
     def ir_proxima(e):
         state["indice"] += 1
         state["respondida"] = False
-        if state["indice"] < len(state["questoes"]) and state["indice"] < 10:
+        if state["indice"] < state["total"]:
             mostrar_pergunta()
         else:
             mostrar_fim()
 
-    # Botão Próxima (Centralizado)
     btn_proxima = ft.FilledButton(
-        content=ft.Text("PRÓXIMA QUESTÃO", weight="bold"),
-        on_click=ir_proxima,
+        content=ft.Text("PRÓXIMA QUESTÃO", weight="bold"), 
+        on_click=ir_proxima, 
         visible=False,
-        width=300,
-        height=50
+        width=300, height=50
     )
 
-    def iniciar_simulado(materia=None):
+    def iniciar(materia=None):
         if materia:
             state["questoes"] = [q for q in state["banco"] if q.get("materia") == materia and q.get("correta")]
         else:
             state["questoes"] = [q for q in state["banco"] if q.get("correta")]
         
-        if not state["questoes"]: return
-
+        if len(state["questoes"]) == 0: return
+        
         random.shuffle(state["questoes"])
         state["indice"] = 0
         state["pontos"] = 0
-        state["respondida"] = False
         mostrar_pergunta()
 
     def mostrar_menu():
         page.clean()
-        page.add(
-            ft.Text("SIMULADO TJ-SP", size=32, weight="bold", color="blue"),
-            ft.Text("Assistente Social", size=20, color="grey"),
-            ft.Divider(height=40),
-            ft.FilledButton(
-                content=ft.Text("INICIAR SIMULADO GERAL", size=16),
-                width=400, height=60, on_click=lambda _: iniciar_simulado()
-            ),
-            ft.Container(height=10),
-            ft.OutlinedButton(
-                content=ft.Text("SÓ SERVIÇO SOCIAL", size=16),
-                width=400, height=60, on_click=lambda _: iniciar_simulado("Serviço Social")
-            ),
-            ft.Container(height=10),
-            ft.OutlinedButton(
-                content=ft.Text("SÓ PORTUGUÊS", size=16),
-                width=400, height=60, on_click=lambda _: iniciar_simulado("Português")
-            ),
-            ft.Divider(height=40),
-            ft.Text(f"Questões disponíveis: {len(state['banco'])}", italic=True)
+        menu_items = ft.Container(
+            content=ft.Column([
+                ft.Text("🎓", size=60),
+                ft.Text("TJ-SP SIMULADOR", size=32, weight="bold", color="blue"),
+                ft.Text("Assistente Social Judiciário", size=18, color="grey700"),
+                ft.Divider(height=40),
+                ft.FilledButton(content=ft.Text("🔥 SIMULADO GERAL (10 questões)"), width=400, height=60, on_click=lambda _: iniciar()),
+                ft.Container(height=5),
+                ft.FilledTonalButton(content=ft.Text("📚 SÓ SERVIÇO SOCIAL"), width=400, height=50, on_click=lambda _: iniciar("Serviço Social")),
+                ft.FilledTonalButton(content=ft.Text("✍️ SÓ PORTUGUÊS"), width=400, height=50, on_click=lambda _: iniciar("Português")),
+                ft.FilledTonalButton(content=ft.Text("💻 SÓ INFORMÁTICA"), width=400, height=50, on_click=lambda _: iniciar("Informática")),
+                ft.Divider(height=40),
+                ft.Text(f"Total: {len(state['banco'])} questões extraídas", size=12, italic=True),
+            ], horizontal_alignment="center"),
+            width=700, bgcolor="white", padding=40, border_radius=20, shadow=ft.BoxShadow(blur_radius=15, color="black12")
         )
+        page.add(ft.Container(height=20), menu_items)
         page.update()
 
     def mostrar_pergunta():
         page.clean()
         btn_proxima.visible = False
+        label_feedback.value = ""
         q = state["questoes"][state["indice"]]
         
-        page.add(
-            ft.Text(f"QUESTÃO {state['indice'] + 1} DE 10", size=18, weight="bold"),
-            ft.ProgressBar(value=(state['indice'] + 1) / 10, color="blue"),
-            ft.Divider(),
-            ft.Text(q["enunciado"], size=16, text_align="justify"),
-            ft.Container(height=20)
+        quadro_questao = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.TextButton(content=ft.Text("🏠 Início"), on_click=lambda _: mostrar_menu()),
+                    ft.Text(f"Questão {state['indice']+1}/10", weight="bold")
+                ], alignment="spaceBetween"),
+                ft.ProgressBar(value=(state['indice']+1)/10, color="blue"),
+                ft.Text(f"Matéria: {q['materia']}", size=11, italic=True, color="blue"),
+                ft.Divider(),
+                ft.Text(q["enunciado"], size=16, text_align="justify"),
+                ft.Container(height=10),
+            ]),
+            width=750, padding=30, bgcolor="white", border_radius=15, shadow=ft.BoxShadow(blur_radius=10, color="black12")
         )
 
-        # Alternativas (Usando FilledTonalButton para cliques mais firmes)
+        # Suporte a Imagens (verifica se existe imagem e arquivo)
+        if q.get("imagem") and os.path.exists(os.path.join("assets", q["imagem"])):
+            quadro_questao.content.controls.insert(4, ft.Row([
+                ft.Image(src=q["imagem"], width=400, fit="contain", border_radius=10)
+            ], alignment="center"))
+
+        # Alternativas (CORRIGIDO: no_wrap=False em vez de soft_wrap)
         for letra, texto in q["alternativas"].items():
-            page.add(
-                ft.FilledTonalButton(
-                    content=ft.Text(f"{letra}) {texto}", size=15, text_align="left"),
-                    data=letra,
-                    on_click=validar_resposta,
-                    width=420,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=8),
-                        padding=15
-                    )
-                ),
-                ft.Container(height=5)
+            quadro_questao.content.controls.append(
+                ft.OutlinedButton(
+                    content=ft.Container(
+                        content=ft.Text(f"{letra}) {texto}", size=14, no_wrap=False), # Aqui estava o erro!
+                        padding=ft.padding.symmetric(vertical=12, horizontal=10),
+                    ),
+                    data=letra, 
+                    on_click=verificar_resposta, 
+                    width=680,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
+                )
             )
         
-        page.add(ft.Divider(), btn_proxima)
+        quadro_questao.content.controls.extend([
+            ft.Divider(), 
+            ft.Row([label_feedback], alignment="center"), 
+            ft.Row([btn_proxima], alignment="center")
+        ])
+
+        page.add(ft.Container(height=20), quadro_questao, ft.Container(height=40))
         page.update()
 
     def mostrar_fim():
         page.clean()
         page.add(
-            ft.Icon("emoji_events", size=100, color="amber"),
-            ft.Text("FIM DO SIMULADO", size=30, weight="bold"),
-            ft.Text(f"Você acertou {state['pontos']} de 10.", size=22),
-            ft.Container(height=30),
-            ft.FilledButton(
-                content=ft.Text("VOLTAR AO INÍCIO"), 
-                on_click=lambda _: mostrar_menu(),
-                width=300, height=50
+            ft.Container(height=40),
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("🏆", size=80),
+                    ft.Text("FIM DO SIMULADO", size=30, weight="bold"),
+                    ft.Text(f"Você acertou {state['pontos']} de 10.", size=22),
+                    ft.Container(height=20),
+                    ft.FilledButton(content=ft.Text("RECOMEÇAR"), on_click=lambda _: mostrar_menu(), width=300, height=50)
+                ], horizontal_alignment="center"),
+                width=500, bgcolor="white", padding=50, border_radius=20, shadow=ft.BoxShadow(blur_radius=15, color="black12")
             )
         )
         page.update()
 
     mostrar_menu()
 
-# Execução padrão 0.80+
 if __name__ == "__main__":
     ft.run(main, assets_dir="assets")
